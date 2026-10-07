@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: prometheus-operator
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+  - name: ml-api-dashboard
+    files:
+      - ml-api.json=ml-api-dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+  - name: backend-api-dashboard
+    files:
+      - backend-api.json=backend-api-dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+  - name: kubernetes-resourcing
+    files:
+      - application-resource-health.json=application-resource-health.json
+    options:
+      labels:
+        grafana_dashboard: "1"
