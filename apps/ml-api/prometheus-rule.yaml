@@ -1,0 +1,102 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ml-api-alerts
+  namespace: ml-api
+  labels:
+    release: prometheus-operator
+spec:
+  groups:
+    - name: ml-api
+      rules:
+        - alert: MLAPIHighErrorRate
+          expr: |
+            100 *
+            sum(rate(ml_api_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(ml_api_requests_total[5m])), 1e-9)
+            > 5
+          for: 5m
+          labels:
+            severity: critical
+            service: ml-api
+          annotations:
+            summary: Some ML API requests are failing
+            description: More than 5% of ML API requests have returned a server error for the last five minutes.
+            action: Check the ML API logs, pod health, and recent deployment changes.
+
+        - alert: MLAPIHighPredictionLatency
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(ml_api_request_duration_seconds_bucket{endpoint="/predict"}[5m])
+              )
+            ) > 1
+          for: 10m
+          labels:
+            severity: warning
+            service: ml-api
+          annotations:
+            summary: ML predictions are taking longer than usual
+            description: The 95th percentile latency for ML predictions has been above one second for ten minutes.
+            action: Check CPU and memory usage, inference workload, and ML API logs.
+
+        - alert: MLAPIDeploymentReplicasUnavailable
+          expr: |
+            kube_deployment_status_replicas_unavailable{
+              namespace="ml-api",
+              deployment="ml-api"
+            } > 0
+          for: 5m
+          labels:
+            severity: critical
+            service: ml-api
+          annotations:
+            summary: An ML API replica is unavailable
+            description: One or more ML API replicas have not been available for at least five minutes.
+            action: Check the deployment, pod events, readiness probes, and container logs.
+
+        - alert: MLAPIContainerRestarts
+          expr: |
+            sum(
+              increase(
+                kube_pod_container_status_restarts_total{
+                  namespace="ml-api",
+                  container="ml-api"
+                }[15m]
+              )
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+            service: ml-api
+          annotations:
+            summary: The ML API is restarting repeatedly
+            description: ML API containers have restarted more than twice during the last fifteen minutes.
+            action: Check pod events and logs for crashes, failed probes, or resource limits.
+
+        - alert: MLAPIHighMemoryUsage
+          expr: |
+            max by (namespace, pod, container) (
+              container_memory_working_set_bytes{
+                namespace="ml-api",
+                container="ml-api"
+              }
+              /
+              on (namespace, pod, container)
+              kube_pod_container_resource_limits{
+                namespace="ml-api",
+                container="ml-api",
+                resource="memory",
+                unit="byte"
+              }
+            ) > 0.8
+          for: 10m
+          labels:
+            severity: warning
+            service: ml-api
+          annotations:
+            summary: An ML API replica is close to its memory limit
+            description: At least one ML API pod has used more than 80% of its memory limit for ten minutes.
+            action: Check the pod memory trend, workload size, and recent restarts.

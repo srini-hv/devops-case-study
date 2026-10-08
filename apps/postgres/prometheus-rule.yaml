@@ -1,0 +1,44 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: postgres-alerts
+  namespace: postgres
+  labels:
+    release: prometheus-operator
+spec:
+  groups:
+    - name: postgres
+      rules:
+        - alert: PostgreSQLUnavailable
+          expr: |
+            kube_deployment_status_replicas_available{
+              namespace="postgres",
+              deployment="postgres"
+            } < 1
+          for: 5m
+          labels:
+            severity: critical
+            service: postgres
+          annotations:
+            summary: PostgreSQL is not available
+            description: PostgreSQL has no available replica for at least five minutes.
+            action: Check the PostgreSQL pod, readiness probe, storage, and container logs.
+
+        - alert: PostgreSQLContainerRestarts
+          expr: |
+            sum(
+              increase(
+                kube_pod_container_status_restarts_total{
+                  namespace="postgres",
+                  container="postgres"
+                }[15m]
+              )
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+            service: postgres
+          annotations:
+            summary: PostgreSQL is restarting repeatedly
+            description: The PostgreSQL container has restarted more than twice during the last fifteen minutes.
+            action: Check PostgreSQL logs, storage, memory limits, and recent configuration changes.

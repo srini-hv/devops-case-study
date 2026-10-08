@@ -1,0 +1,118 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backend-api-alerts
+  namespace: backend-api
+  labels:
+    release: prometheus-operator
+spec:
+  groups:
+    - name: backend-api
+      rules:
+        - alert: BackendAPIHighErrorRate
+          expr: |
+            100 *
+            sum(rate(backend_api_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(backend_api_requests_total[5m])), 1e-9)
+            > 5
+          for: 5m
+          labels:
+            severity: critical
+            service: backend-api
+          annotations:
+            summary: Some Backend API requests are failing
+            description: More than 5% of Backend API requests have returned a server error for the last five minutes.
+            action: Check the Backend API logs, database errors, and pod health.
+
+        - alert: BackendAPIHighProcessingLatency
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(backend_api_request_duration_seconds_bucket{endpoint="/process"}[5m])
+              )
+            ) > 1
+          for: 10m
+          labels:
+            severity: warning
+            service: backend-api
+          annotations:
+            summary: Backend document processing is taking longer than usual
+            description: The 95th percentile latency for Backend API document processing has been above one second for ten minutes.
+            action: Check database performance, Backend API resource usage, and application logs.
+
+        - alert: BackendAPIDeploymentReplicasUnavailable
+          expr: |
+            kube_deployment_status_replicas_unavailable{
+              namespace="backend-api",
+              deployment="backend-api"
+            } > 0
+          for: 5m
+          labels:
+            severity: critical
+            service: backend-api
+          annotations:
+            summary: A Backend API replica is unavailable
+            description: One or more Backend API replicas have not been available for at least five minutes.
+            action: Check the deployment, pod events, readiness probes, and container logs.
+
+        - alert: BackendAPIHighDatabaseErrorRate
+          expr: |
+            100 *
+            sum(rate(backend_api_db_queries_total{status="error"}[5m]))
+            /
+            clamp_min(sum(rate(backend_api_db_queries_total[5m])), 1e-9)
+            > 1
+          for: 5m
+          labels:
+            severity: critical
+            service: backend-api
+          annotations:
+            summary: Backend API database queries are failing
+            description: More than 1% of database queries reported by the Backend API have failed for five minutes.
+            action: Check PostgreSQL logs, schema migrations, connectivity, and database credentials.
+
+        - alert: BackendAPIContainerRestarts
+          expr: |
+            sum(
+              increase(
+                kube_pod_container_status_restarts_total{
+                  namespace="backend-api",
+                  container="backend-api"
+                }[15m]
+              )
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+            service: backend-api
+          annotations:
+            summary: The Backend API is restarting repeatedly
+            description: Backend API containers have restarted more than twice during the last fifteen minutes.
+            action: Check pod events and logs for crashes, failed probes, or resource limits.
+
+        - alert: BackendAPIHighMemoryUsage
+          expr: |
+            max by (namespace, pod, container) (
+              container_memory_working_set_bytes{
+                namespace="backend-api",
+                container="backend-api"
+              }
+              /
+              on (namespace, pod, container)
+              kube_pod_container_resource_limits{
+                namespace="backend-api",
+                container="backend-api",
+                resource="memory",
+                unit="byte"
+              }
+            ) > 0.8
+          for: 10m
+          labels:
+            severity: warning
+            service: backend-api
+          annotations:
+            summary: A Backend API replica is close to its memory limit
+            description: At least one Backend API pod has used more than 80% of its memory limit for ten minutes.
+            action: Check the pod memory trend, workload size, and recent restarts.
