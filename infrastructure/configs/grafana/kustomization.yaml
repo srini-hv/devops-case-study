@@ -22,3 +22,9 @@ configMapGenerator:
     options:
       labels:
         grafana_dashboard: "1"
+  - name: application-alerts
+    files:
+      - application-alerts.json=application-alerts.json
+    options:
+      labels:
+        grafana_dashboard: "1"
