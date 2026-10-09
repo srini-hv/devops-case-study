@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLUSTER_NAME="devops-cs"
 REGISTRY="ghcr.io/voize-gmbh/devops-case-study"
 LOCAL_IMAGES=false
+PURGE_CLUSTER=false
 
 echo "=== DevOps Case Study - Cluster Bootstrap ==="
 
@@ -13,6 +14,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --local)
       LOCAL_IMAGES=true
+      shift
+      ;;
+    --purge)
+      PURGE_CLUSTER=true
       shift
       ;;
     -*)
@@ -35,6 +40,7 @@ if [ -z "$GITHUB_REPO" ]; then
   echo "  Example: ./bootstrap.sh https://github.com/youruser/devops-case-study main"
   echo ""
   echo "  --local  Import images from local Docker instead of pulling from registry"
+  echo "  --purge  Delete and recreate the k3d cluster"
   echo ""
   echo "The repo URL should be your fork of this repository."
   echo "Requires GITHUB_TOKEN env var with repo scope."
@@ -66,17 +72,24 @@ if [ -z "${GITHUB_TOKEN:-}" ]; then
   exit 1
 fi
 
-# --- Create k3d cluster ---
+# --- Create or reuse k3d cluster ---
 echo ""
-echo "--- Creating k3d cluster '$CLUSTER_NAME' ---"
-if k3d cluster list | grep -q "$CLUSTER_NAME"; then
-  echo "Cluster '$CLUSTER_NAME' already exists. Deleting..."
-  k3d cluster delete "$CLUSTER_NAME"
+echo "--- Ensuring k3d cluster '$CLUSTER_NAME' exists ---"
+
+if k3d cluster list | grep -q "^$CLUSTER_NAME"; then
+  if [ "$PURGE_CLUSTER" = true ]; then
+    echo "Cluster '$CLUSTER_NAME' already exists. Deleting and recreating..."
+    k3d cluster delete "$CLUSTER_NAME"
+    k3d cluster create --config "$SCRIPT_DIR/k3d.config.yaml"
+  else
+    echo "Reusing existing k3d cluster '$CLUSTER_NAME'."
+  fi
+else
+  echo "Creating k3d cluster '$CLUSTER_NAME'..."
+  k3d cluster create --config "$SCRIPT_DIR/k3d.config.yaml"
 fi
 
-k3d cluster create --config "$SCRIPT_DIR/k3d.config.yaml"
-
-echo "Waiting for cluster to be ready..."
+kubectl config use-context "k3d-$CLUSTER_NAME" >/dev/null
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
 
 # --- Import local images if --local flag is set ---
@@ -103,9 +116,14 @@ flux bootstrap github \
 # --- Wait for workloads ---
 echo ""
 echo "--- Waiting for workloads to be deployed ---"
+kubectl wait --for=condition=Ready kustomization/infra-controllers -n flux-system --timeout=600s
+kubectl wait --for=condition=Ready kustomization/infra-configs -n flux-system --timeout=600s
+kubectl wait --for=condition=Ready kustomization/apps -n flux-system --timeout=600s
+
 kubectl wait --for=condition=Available deployment/postgres -n postgres --timeout=180s
 kubectl wait --for=condition=Available deployment/ml-api -n ml-api --timeout=180s
 kubectl wait --for=condition=Available deployment/backend-api -n backend-api --timeout=180s
+kubectl wait --for=condition=Available deployment/load-generator -n load-generator --timeout=180s
 
 echo ""
 echo "=== Bootstrap complete! ==="

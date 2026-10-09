@@ -6,3 +6,4 @@ resources:
   - deployment.yaml
   - service.yaml
   - prometheus-rule.yaml
+  - service-monitor.yaml

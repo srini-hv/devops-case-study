@@ -42,6 +42,27 @@ spec:
                 - voize
             initialDelaySeconds: 5
             periodSeconds: 5
+        - name: postgres-exporter
+          image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+          env:
+            - name: DATA_SOURCE_NAME
+              value: "postgresql://voize:voize@localhost:5432/voize?sslmode=disable"
+          ports:
+            - containerPort: 9187
+              name: metrics
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
       volumes:
         - name: postgres-data
           emptyDir: {}

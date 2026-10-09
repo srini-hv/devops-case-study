@@ -28,3 +28,9 @@ configMapGenerator:
     options:
       labels:
         grafana_dashboard: "1"
+  - name: postgresql-overview
+    files:
+      - postgresql-overview.json=postgresql-overview.json
+    options:
+      labels:
+        grafana_dashboard: "1"

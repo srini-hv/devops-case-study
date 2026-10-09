@@ -42,3 +42,38 @@ spec:
             summary: PostgreSQL is restarting repeatedly
             description: The PostgreSQL container has restarted more than twice during the last fifteen minutes.
             action: Check PostgreSQL logs, storage, memory limits, and recent configuration changes.
+        - alert: PostgreSQLHighRollbackRate
+          expr: |
+            100 *
+            sum(rate(pg_stat_database_xact_rollback[5m]))
+            /
+            clamp_min(
+              sum(rate(pg_stat_database_xact_commit[5m]))
+              + sum(rate(pg_stat_database_xact_rollback[5m])),
+              1
+            )
+            > 5
+          for: 5m
+          labels:
+            severity: warning
+            service: postgres
+          annotations:
+            summary: PostgreSQL is rolling back many transactions
+            description: More than 5% of PostgreSQL transactions have rolled back during the last five minutes.
+            action: Check application errors, constraint violations, lock contention, and recent database changes.
+
+        - alert: PostgreSQLDeadlocksDetected
+          expr: |
+            sum(
+              increase(
+                pg_stat_database_deadlocks[15m]
+              )
+            ) > 0
+          for: 5m
+          labels:
+            severity: warning
+            service: postgres
+          annotations:
+            summary: PostgreSQL deadlocks were detected
+            description: PostgreSQL has recorded one or more deadlocks during the last fifteen minutes.
+            action: Check blocked transactions, lock ordering, long-running queries, and application retry behavior.
