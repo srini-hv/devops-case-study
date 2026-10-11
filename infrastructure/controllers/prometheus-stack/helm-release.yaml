@@ -44,6 +44,7 @@ spec:
     grafana:
       enabled: true
       adminPassword: "grafana"
+      defaultDashboardsEnabled: false
       persistence:
         enabled: true
         storageClassName: local-path
