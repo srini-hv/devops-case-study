@@ -598,7 +598,7 @@
         "prettifyLogMessage": false,
         "showCommonLabels": false,
         "showLabels": false,
-        "showTime": false,
+        "showTime": true,
         "sortOrder": "Descending",
         "wrapLogMessage": false
       },
@@ -615,7 +615,7 @@
           "refId": "A"
         }
       ],
-      "title": "Panel Title",
+      "title": "Application Logs",
       "type": "logs"
     }
   ],

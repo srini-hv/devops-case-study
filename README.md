@@ -30,6 +30,7 @@ The monitoring resources are reconciled by Flux from Git. Application ServiceMon
 | **Backend API Overview** | Document-processing traffic, request status, processing latency, 5xx rate, database connections, and database query failures |
 | **PostgreSQL Overview** | Database connectivity, active connections, transaction activity, rollback rate, cache hit ratio, database size, deadlocks, and temporary data written |
 | **Application Resource Health** | CPU and memory compared with requests and limits, OOM events, restarts, pod readiness, and application logs |
+| **Cluster Health** | Node readiness, node CPU and memory, unavailable deployments, pending or failed pods, pending PVCs, and cluster alerts |
 | **Application Alerts** | Current firing and pending application alerts grouped by service and severity |
 
 The dashboards are provisioned from JSON files through labelled ConfigMaps, so the Git version is the source of truth. UI edits to provisioned dashboards are not expected to persist across reconciliation.
@@ -59,7 +60,12 @@ The dashboards are provisioned from JSON files through labelled ConfigMaps, so t
 | `container_oom_events_total` | Container OOM events during the selected time range | Application Resource Health |
 | `kube_pod_container_status_restarts_total` | Repeated container restarts | Application Resource Health |
 | `kube_pod_status_ready` | Ready and unready pod counts | Application Resource Health |
-| `ALERTS` | Current pending and firing alert state | Application Alerts |
+| `kube_node_status_condition` | Node readiness | Cluster Health |
+| `node_cpu_seconds_total` | CPU usage by node and across the cluster | Cluster Health |
+| `node_memory_MemAvailable_bytes` / `MemTotal` | Memory usage by node and across the cluster | Cluster Health |
+| `kube_pod_status_phase` | Pods stuck Pending, Failed, or Unknown | Cluster Health |
+| `kube_persistentvolumeclaim_status_phase` | PVCs waiting for storage | Cluster Health |
+| `ALERTS` | Current pending and firing alert state | Application Alerts / Cluster Health |
 
 Dashboard resource values are averaged across matching replicas so usage, requests, and limits represent a typical replica. Alert expressions use the maximum individual pod usage where appropriate so one overloaded replica is not hidden by healthy replicas.
 
@@ -84,8 +90,15 @@ Prometheus evaluates the rules every 30 seconds. The `for` duration prevents a s
 | `PostgreSQLContainerRestarts` | PostgreSQL restarts more than twice in 15 minutes | 5m | Warning |
 | `PostgreSQLHighRollbackRate` | More than 5% of transactions roll back | 5m | Warning |
 | `PostgreSQLDeadlocksDetected` | One or more deadlocks occur in 15 minutes | 5m | Warning |
+| `ClusterNodeNotReady` | A node is not Ready | 5m | Critical |
+| `ClusterPodsPendingTooLong` | Pods remain Pending for 10 minutes | 10m | Warning |
+| `ClusterPodsCrashLooping` | A pod remains in CrashLoopBackOff | 5m | Warning |
+| `ClusterPVCIsPending` | A PVC remains Pending | 10m | Warning |
+| `ClusterNodeHighMemoryUsage` | A node uses more than 85% memory | 10m | Warning |
+| `ClusterNodeHighCPUUsage` | A node uses more than 85% CPU | 15m | Warning |
+| `ClusterNodeDiskSpaceLow` | A node has less than 15% free disk space | 10m | Warning |
 
-At present, Alertmanager receives firing alerts but routes them to its default `null` receiver. Alert state is therefore visible in Prometheus, Alertmanager, and the Application Alerts dashboard, but no external notification is sent yet.
+At present, Alertmanager receives firing alerts but routes them to its default `null` receiver. Alert state is therefore visible in Prometheus, Alertmanager, the Application Alerts dashboard, and the Cluster Health dashboard, but no external notification is sent yet.
 
 ## Example incident
 
@@ -118,6 +131,8 @@ This demonstrates why both user-facing alerts and dependency-specific alerts are
 - **No external Alertmanager receiver yet:** This keeps the local setup self-contained. Mailpit, Slack, or PagerDuty could be added later.
 - **No automated PostgreSQL schema migration:** A migration or initialization Job would create the `documents` table declaratively.
 - **Alert thresholds are initial working values:** They should be tuned against production baselines and service-level objectives.
+- **Distributed tracing:** Add the OpenTelemetry Operator and Python auto-instrumentation to the API pods, route OTLP traces through Alloy to Tempo, and add the traces to Grafana.
+- **Custom trace detail:** If application source becomes available, add manual spans around business operations, ML inference, database calls, and trace-aware application logs.
 
 ## Verification
 

@@ -1,0 +1,125 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cluster-alerts
+  namespace: prometheus-operator
+  labels:
+    release: prometheus-operator
+spec:
+  groups:
+    - name: cluster-health
+      rules:
+        - alert: ClusterNodeNotReady
+          expr: |
+            kube_node_status_condition{
+              condition="Ready",
+              status="true"
+            } == 0
+          for: 5m
+          labels:
+            severity: critical
+            service: kubernetes
+          annotations:
+            summary: A Kubernetes node is not ready
+            description: Node {{ $labels.node }} has not reported Ready for at least five minutes.
+            action: Check node conditions, kubelet health, and cluster capacity.
+
+        - alert: ClusterPodsPendingTooLong
+          expr: |
+            sum by (namespace) (
+              kube_pod_status_phase{phase="Pending"} > 0
+            ) > 0
+          for: 10m
+          labels:
+            severity: warning
+            service: kubernetes
+          annotations:
+            summary: Pods have been pending for too long
+            description: One or more pods in namespace {{ $labels.namespace }} have remained Pending for at least ten minutes.
+            action: Check scheduling events, node capacity, image pulls, and persistent volumes.
+
+        - alert: ClusterPodsCrashLooping
+          expr: |
+            kube_pod_container_status_waiting_reason{
+              reason="CrashLoopBackOff"
+            } > 0
+          for: 5m
+          labels:
+            severity: warning
+            service: kubernetes
+          annotations:
+            summary: A Kubernetes pod is crash looping
+            description: Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} is in CrashLoopBackOff.
+            action: Check the container logs, pod events, probes, and resource limits.
+
+        - alert: ClusterPVCIsPending
+          expr: |
+            kube_persistentvolumeclaim_status_phase{
+              phase="Pending"
+            } > 0
+          for: 10m
+          labels:
+            severity: warning
+            service: kubernetes
+          annotations:
+            summary: A persistent volume claim is pending
+            description: PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has not been bound for at least ten minutes.
+            action: Check the StorageClass, provisioner, and available storage.
+
+        - alert: ClusterNodeHighMemoryUsage
+          expr: |
+            100 * (
+              1 -
+              node_memory_MemAvailable_bytes
+              /
+              node_memory_MemTotal_bytes
+            ) > 85
+          for: 10m
+          labels:
+            severity: warning
+            service: kubernetes
+          annotations:
+            summary: A Kubernetes node is under memory pressure
+            description: Node {{ $labels.instance }} has used more than 85% of its memory for ten minutes.
+            action: Check workload memory usage, evictions, and node capacity.
+
+        - alert: ClusterNodeHighCPUUsage
+          expr: |
+            max by (instance) (
+              100 * (
+                1 -
+                avg by (instance) (
+                  rate(node_cpu_seconds_total{mode="idle"}[5m])
+                )
+              )
+            ) > 85
+          for: 15m
+          labels:
+            severity: warning
+            service: kubernetes
+          annotations:
+            summary: A Kubernetes node has sustained high CPU usage
+            description: Node {{ $labels.instance }} has used more than 85% CPU for fifteen minutes.
+            action: Check workload CPU usage, throttling, and available node capacity.
+
+        - alert: ClusterNodeDiskSpaceLow
+          expr: |
+            (
+              node_filesystem_avail_bytes{
+                mountpoint="/",
+                fstype!~"tmpfs|overlay"
+              }
+              /
+              node_filesystem_size_bytes{
+                mountpoint="/",
+                fstype!~"tmpfs|overlay"
+              }
+            ) < 0.15
+          for: 10m
+          labels:
+            severity: warning
+            service: kubernetes
+          annotations:
+            summary: A Kubernetes node has low disk space
+            description: Node {{ $labels.instance }} has less than 15% free space on its root filesystem.
+            action: Check container logs, image storage, volumes, and node disk usage.

@@ -34,3 +34,9 @@ configMapGenerator:
     options:
       labels:
         grafana_dashboard: "1"
+  - name: cluster-health
+    files:
+      - cluster-health.json=cluster-health.json
+    options:
+      labels:
+        grafana_dashboard: "1"
